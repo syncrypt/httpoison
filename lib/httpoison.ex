@@ -4,8 +4,9 @@ defmodule HTTPoison.Response do
 end
 
 defmodule HTTPoison.AsyncResponse do
-  defstruct id: nil
-  @type t :: %__MODULE__{id: reference}
+  defstruct id: nil,
+            transformer: nil
+  @type t :: %__MODULE__{id: reference, transformer: pid}
 end
 
 defmodule HTTPoison.AsyncStatus do
@@ -65,4 +66,3 @@ defmodule HTTPoison do
 
   use HTTPoison.Base
 end
-

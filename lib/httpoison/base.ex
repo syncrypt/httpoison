@@ -345,6 +345,37 @@ defmodule HTTPoison.Base do
         end
       end
 
+      @doc """
+      Sets async receive options on a `HTTPoison.AsyncResponse`.
+
+      Args:
+        * `resp` - `AsyncResponse` to set options on
+        * `options` - Keyword list of options
+
+      Options:
+        * `:stream_to` - a PID to stream the response to
+        * `:async` - if given `:once`, will only stream one message at a time, requires call to `stream_next`
+        * `:follow_redirect` - a boolean that causes redirects to be followed
+        * `:force_redirect` - a boolean that causes redirects to always be followed (even on POST requests)
+        * `:max_redirect` - an integer denoting the maximum number of redirects to follow
+
+      Returns `{:ok, response}` if options are set successfully,
+      `{:error, reason}` otherwise.
+      """
+      def set_opts(resp = %AsyncResponse{id: id, transformer: transformer}, options) do
+        options = case options[:stream_to] do
+          nil -> options
+          pid ->
+            send transformer, {:stream_to, pid}
+            options
+            |> Keyword.delete(:stream_to)
+        end
+        case :hackney.setopts(id, options) do
+          :ok -> {:ok, resp}
+          err -> {:error, %Error{reason: "set_opts/2 failed", id: id}}
+        end
+      end
+
       defoverridable Module.definitions_in(__MODULE__)
     end
   end
@@ -367,6 +398,8 @@ defmodule HTTPoison.Base do
       {:hackney_response, id, chunk} ->
         send target, %HTTPoison.AsyncChunk{id: id, chunk: process_response_chunk.(chunk)}
         transformer(module, target, process_status_code, process_headers, process_response_chunk)
+      {:stream_to, pid} ->
+        transformer(module, pid, process_status_code, process_headers, process_response_chunk)
     end
   end
 
@@ -427,7 +460,7 @@ defmodule HTTPoison.Base do
           {:ok, body} -> response(process_status_code, process_headers, process_response_body, status_code, headers, body)
           {:error, reason} -> {:error, %Error{reason: reason} }
         end
-      {:ok, id} -> { :ok, %HTTPoison.AsyncResponse{ id: id } }
+      {:ok, id} -> { :ok, %HTTPoison.AsyncResponse{ id: id, transformer: hn_options[:stream_to] } }
       {:error, reason} -> {:error, %Error{reason: reason}}
      end
   end
